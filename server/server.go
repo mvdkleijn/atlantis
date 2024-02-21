@@ -62,7 +62,6 @@ import (
 	"github.com/runatlantis/atlantis/server/events/vcs"
 	"github.com/runatlantis/atlantis/server/events/vcs/bitbucketcloud"
 	"github.com/runatlantis/atlantis/server/events/vcs/bitbucketserver"
-	"github.com/runatlantis/atlantis/server/events/vcs/gitea"
 	"github.com/runatlantis/atlantis/server/events/webhooks"
 	"github.com/runatlantis/atlantis/server/logging"
 )
@@ -177,7 +176,6 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 	var bitbucketCloudClient *bitbucketcloud.Client
 	var bitbucketServerClient *bitbucketserver.Client
 	var azuredevopsClient *vcs.AzureDevopsClient
-	var giteaClient *gitea.GiteaClient
 
 	policyChecksEnabled := false
 	if userConfig.EnablePolicyChecksFlag {
@@ -302,19 +300,6 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 			return nil, err
 		}
 	}
-	if userConfig.GiteaToken != "" {
-		supportedVCSHosts = append(supportedVCSHosts, models.Gitea)
-
-		giteaClient, err = gitea.NewClient(userConfig.GiteaBaseURL, userConfig.GiteaUser, userConfig.GiteaToken, userConfig.GiteaPageSize, logger)
-		if err != nil {
-			fmt.Println("error setting up gitea client", "error", err)
-			return nil, errors.Wrapf(err, "setting up Gitea client")
-		} else {
-			logger.Info("gitea client configured successfully")
-		}
-	}
-
-	logger.Info("Supported VCS Hosts", "hosts", supportedVCSHosts)
 
 	home, err := homedir.Dir()
 	if err != nil {
@@ -348,11 +333,6 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 				return nil, err
 			}
 		}
-		if userConfig.GiteaUser != "" {
-			if err := vcs.WriteGitCreds(userConfig.GiteaUser, userConfig.GiteaToken, userConfig.GiteaBaseURL, home, logger, false); err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	// default the project files used to generate the module index to the autoplan-file-list if autoplan-modules is true
@@ -376,7 +356,7 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing webhooks")
 	}
-	vcsClient := vcs.NewClientProxy(githubClient, gitlabClient, bitbucketCloudClient, bitbucketServerClient, azuredevopsClient, giteaClient)
+	vcsClient := vcs.NewClientProxy(githubClient, gitlabClient, bitbucketCloudClient, bitbucketServerClient, azuredevopsClient)
 	commitStatusUpdater := &events.DefaultCommitStatusUpdater{Client: vcsClient, StatusName: userConfig.VCSStatusName}
 
 	binDir, err := mkSubDir(userConfig.DataDir, BinDirName)
@@ -818,7 +798,6 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		GithubPullGetter:               githubClient,
 		GitlabMergeRequestGetter:       gitlabClient,
 		AzureDevopsPullGetter:          azuredevopsClient,
-		GiteaPullGetter:                giteaClient,
 		CommentCommandRunnerByCmd:      commentCommandRunnerByCmd,
 		EventParser:                    eventParser,
 		FailOnPreWorkflowHookError:     userConfig.FailOnPreWorkflowHookError,
@@ -910,7 +889,6 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		AzureDevopsWebhookBasicUser:     []byte(userConfig.AzureDevopsWebhookUser),
 		AzureDevopsWebhookBasicPassword: []byte(userConfig.AzureDevopsWebhookPassword),
 		AzureDevopsRequestValidator:     &events_controllers.DefaultAzureDevopsRequestValidator{},
-		GiteaWebhookSecret:              []byte(userConfig.GiteaWebhookSecret),
 	}
 	githubAppController := &controllers.GithubAppController{
 		AtlantisURL:         parsedURL,
